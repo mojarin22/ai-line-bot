@@ -1,57 +1,58 @@
-# main.py
-
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import openai
 import os
 
-app = Flask(__name__)
-
-# LINEとOpenAIの秘密鍵（Renderで環境変数として設定する）
+# 環境変数からトークンとシークレットを取得
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# 各種初期化
+app = Flask(__name__)
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 openai.api_key = OPENAI_API_KEY
 
-@app.route("/callback", methods=["POST"])
+# LINEからのWebhook受け取り用エンドポイント
+@app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers["X-Line-Signature"]
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
 
     try:
         handler.handle(body, signature)
-    except:
+    except InvalidSignatureError:
         abort(400)
-    return "OK"
 
+    return 'OK'
+
+# メッセージを受け取ったときの処理
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    user_input = event.message.text
+    user_message = event.message.text
 
-    prompt = f"""
-あなたは27歳の女性型AI『アイ』です。性格は小悪魔で面倒見がよく、非モテ男子を導く存在です。
-以下のユーザーの悩みに、優しく、でもちょっとからかうように答えてください。
+    # OpenAI（ChatGPT）に送信して返事をもらう
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "あなたは優しくて少し小悪魔な女性AI『アイ』です。LINEの利用者（タカシさん）を褒めたり、応援したりしながら優しく会話してください。"},
+                {"role": "user", "content": user_message}
+            ]
+        )
+        reply_text = response["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        reply_text = f"エラーが発生しました: {str(e)}"
 
-ユーザー: {user_input}
-アイ:
-"""
-
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=500,
-        temperature=0.9
-    )
-
-    reply = response["choices"][0]["message"]["content"]
+    # LINEに返信
     line_bot_api.reply_message(
         event.reply_token,
-        TextSendMessage(text=reply)
+        TextSendMessage(text=reply_text)
     )
 
+# Flaskサーバー起動設定（Render対応）
 if __name__ == "__main__":
-    app.run()
+    app.run(host="0.0.0.0", port=10000)
