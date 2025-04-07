@@ -1,0 +1,21 @@
+# 機密ファイル・認証情報
+.env
+user_data.db
+
+# ログファイル
+logs/
+*.log
+
+# Pythonキャッシュ
+__pycache__/
+*.py[cod]
+*.pyo
+
+# テストDBなど一時ファイル
+*.sqlite3
+*.db
+*.bak
+
+# OSごとの不要ファイル
+.DS_Store
+Thumbs.db
